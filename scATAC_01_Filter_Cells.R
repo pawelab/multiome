@@ -145,16 +145,19 @@ txdb <- TxDb.Hsapiens.UCSC.hg19.knownGene
 minFrags <- 100
 filterFrags <- 1000
 filterTSS <- 8
-file_fragments <- "data/PBMC_10x-Sub25M-fragments.tsv.gz"
-out_fragments <- "data/PBMC_10x-Sub25M-fragments.gr.rds"
+# file_fragments <- "data/PBMC_10x-Sub25M-fragments.tsv.gz"
+file_fragments <- "/projectnb/paxlab/isarfraz/Data/GSM4138893_scATAC_PBMC_D10T1.fragments.tsv.gz"
+# out_fragments <- "data/PBMC_10x-Sub25M-fragments.gr.rds"
+out_fragments <- "/projectnb/paxlab/isarfraz/Data/data/GSM4138893_scATAC_PBMC_D10T1.fragments.rds"
 name <- "PBMC"
 
 ####################################################
 # Reading Fragment Files
 ####################################################
 message("Reading in fragment files...")
-fragments <- data.frame(readr::read_tsv(file_fragments, col_names=FALSE))
 
+# fragments of sequences?
+fragments <- data.frame(readr::read_tsv(file_fragments, col_names=FALSE))
 fragments <- GRanges(
   seqnames = fragments[,1], 
   IRanges(fragments[,2]+1, fragments[,3]), 
@@ -162,6 +165,15 @@ fragments <- GRanges(
   N = fragments[,5]
   )
 
+print(head(fragments))
+# seqnames = chromosome number 
+# ranges = range on the strand (chr start and end)
+# strand = which strand
+# ---------
+# RG = cell/barcodes
+# N = ??
+
+# each barcode/cell must have atleast minFrags fragments, otherwise remove
 message("Filtering Lowly Represented Cells...")
 tabRG <- table(fragments$RG)
 keep <- names(tabRG)[which(tabRG >= minFrags)]
@@ -171,7 +183,10 @@ fragments <- sort(sortSeqlevels(fragments))
 ####################################################
 # TSS Profile
 ####################################################
+# getting chr/ranges info from hg19 genome (known genes) about 51k genes
 feature <- txdb %>% transcripts(.) %>% resize(., width = 1, fix = "start") %>% unique
+
+# computes some stats, TSS enrichment scores etc, for each cell 
 tssProfile <- insertionProfileSingles(feature = feature, fragments = fragments, 
   getInsertions = TRUE, batchSize = 1000)
 tssSingles <- tssProfile$dfall
@@ -187,7 +202,8 @@ tssSingles <- tssSingles[complete.cases(tssSingles),]
 nPass  <- sum(tssSingles$cellCall==1)
 nTotal <- sum(tssSingles$uniqueFrags >= filterFrags)
 
-pdf("results/Filter-Cells.pdf")
+# a plot to figure out which cells pass TSS threshold, x is uniqueFrags per cell and y ix score
+# pdf("results/Filter-Cells.pdf")
 ggplot(tssSingles[tssSingles$uniqueFrags > 500,], aes(x = log10(uniqueFrags), y = enrichment)) +
   geom_hex(bins = 100) +
   theme_bw() + scale_fill_viridis() +
@@ -196,16 +212,17 @@ ggplot(tssSingles[tssSingles$uniqueFrags > 500,], aes(x = log10(uniqueFrags), y 
   geom_hline(yintercept = filterTSS, lty = "dashed") +
   geom_vline(xintercept = log10(filterFrags), lty = "dashed") +
   ggtitle(sprintf("Pass Rate : %s of %s (%s)", nPass, nTotal, round(100*nPass/nTotal,2)))
-dev.off()
+# dev.off()
 
-write.table(tssSingles, "results/Filter-Cells.txt")
+# write.table(tssSingles, "results/Filter-Cells.txt")
 
+# now actual filtering (all chr from filtered cells in fragments now) 
 #Filter
 fragments <- fragments[mcols(fragments)[,"RG"] %in% rownames(tssSingles)[tssSingles$cellCall==1]]
 fragments$RG <- paste0(name,"#",fragments$RG)
 
 #Save
-saveRDS(fragments, out_fragments)
+# saveRDS(fragments, out_fragments)
 
 
 
