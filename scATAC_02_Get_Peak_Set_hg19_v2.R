@@ -71,25 +71,55 @@ seuratLSI <- function(mat, nComponents = 50, binarize = TRUE, nFeatures = NULL){
   message("Making Seurat Object...")
   mat <- mat[1:100,] + 1
   obj <- CreateSeuratObject(mat, project='scATAC', min.cells=0, min.genes=0)
-  obj <- SetDimReduction(object = obj, reduction.type = "pca", slot = "cell.embeddings", new.data = matSVD)
-  obj <- SetDimReduction(object = obj, reduction.type = "pca", slot = "key", new.data = "PC")
+  
+  # new setDimReduction code
+  dimObj <- CreateDimReducObject(
+    embeddings = matSVD,
+    key = "PC"
+  )
+  obj[["pca"]] <- dimObj
+  
+  # outdated code for Seurat 
+  # obj <- SetDimReduction(object = obj, reduction.type = "pca", slot = "cell.embeddings", new.data = matSVD)
+  # obj <- SetDimReduction(object = obj, reduction.type = "pca", slot = "key", new.data = "PC")
   return(obj)
 }
 
 addClusters <- function(obj, minGroupSize = 50, dims.use = seq_len(50), initialResolution = 0.8){
   #First Iteration of Find Clusters
   currentResolution <- initialResolution
-  obj <- FindClusters(object = obj, reduction.type = "pca", dims.use = dims.use, resolution = currentResolution, print.output = FALSE)
-  minSize <- min(table(obj@meta.data[[paste0("res.",currentResolution)]]))
-  nClust <- length(unique(paste0(obj@meta.data[[paste0("res.",currentResolution)]])))
+  
+  # below is outdated
+  # obj <- FindClusters(object = obj, reduction.type = "pca", dims.use = dims.use, resolution = currentResolution, print.output = FALSE)
+  obj <- FindNeighbors(object = obj, reduction = "pca", dims = dims.use) # new code
+  obj <- FindClusters(object = obj, resolution = currentResolution) # new code
+  
+  
+  # minSize <- min(table(obj@meta.data[[paste0("res.",currentResolution)]]))
+  minSize <- min(table(obj@meta.data[[paste0("RNA_snn_res.",currentResolution)]]))
+  
+  # nClust <- length(unique(paste0(obj@meta.data[[paste0("res.",currentResolution)]])))
+  nClust <- length(unique(paste0(obj@meta.data[[paste0("RNA_snn_res.",currentResolution)]])))
+  
   message(sprintf("Current Resolution = %s, No of Clusters = %s, Minimum Cluster Size = %s", currentResolution, nClust, minSize))
   #If clusters are smaller than minimum group size
   while(minSize <= minGroupSize){
-    obj@meta.data <- obj@meta.data[,-which(colnames(obj@meta.data)==paste0("res.",currentResolution))]
+    # obj@meta.data <- obj@meta.data[,-which(colnames(obj@meta.data)==paste0("res.",currentResolution))]
+    obj@meta.data <- obj@meta.data[,-which(colnames(obj@meta.data)==paste0("RNA_snn_res.",currentResolution))]
+    
     currentResolution <- currentResolution*initialResolution
-    obj <- FindClusters(object = obj, reduction.type = "pca", dims.use = dims.use, resolution = currentResolution, print.output = FALSE, force.recalc = TRUE)
-    minSize <- min(table(obj@meta.data[[paste0("res.",currentResolution)]]))
-    nClust <- length(unique(paste0(obj@meta.data[[paste0("res.",currentResolution)]])))
+    
+    obj <- FindNeighbors(object = obj, reduction = "pca", dims = dims.use) # new code
+    obj <- FindClusters(object = obj, resolution = currentResolution) # new code
+    
+    # obj <- FindClusters(object = obj, reduction.type = "pca", dims.use = dims.use, resolution = currentResolution, print.output = FALSE, force.recalc = TRUE)
+    
+    # minSize <- min(table(obj@meta.data[[paste0("res.",currentResolution)]]))
+    # nClust <- length(unique(paste0(obj@meta.data[[paste0("res.",currentResolution)]])))
+    
+    minSize <- min(table(obj@meta.data[[paste0("RNA_snn_res.",currentResolution)]]))
+    nClust <- length(unique(paste0(obj@meta.data[[paste0("RNA_snn_res.",currentResolution)]])))
+    
     message(sprintf("Current Resolution = %s, No of Clusters = %s, Minimum Cluster Size = %s", currentResolution, nClust, minSize))
   }
   return(obj)
@@ -203,15 +233,24 @@ groupSums <- function(mat, groups = NULL, na.rm = TRUE, sparse = FALSE){
 #-------------------------------------------------------------------------------------------------
 # Start
 #-------------------------------------------------------------------------------------------------
-fragmentFiles <- list.files("data", pattern = ".rds", full.names = TRUE)
+# this is using the filtered fragments rds file previously generated from script 01
+fragmentFiles <- list.files("/projectnb/paxlab/isarfraz/Data", pattern = ".rds", full.names = TRUE)
 
 #-------------------------------------------------------------------------------------------------
 # Get Counts In Windows
 #-------------------------------------------------------------------------------------------------
+# ref hg19 genome
 genome <- BSgenome.Hsapiens.UCSC.hg19
+# making granges object from ref genome (each row is one chr)
 chromSizes <- GRanges(names(seqlengths(genome)), IRanges(1, seqlengths(genome)))
+# possibly fitering some chr?
 chromSizes <- GenomeInfoDb::keepStandardChromosomes(chromSizes, pruning.mode = "coarse")
+# making ranges of each chr
 windows <- unlist(tile(chromSizes, width = 2500))
+
+# from fragments file, it creates a counts matrix
+# columns are cells
+# rows are????
 countsList <- lapply(seq_along(fragmentFiles), function(i){
 	message(sprintf("%s of %s", i, length(fragmentFiles)))
 	counts <- countInsertions(windows, readRDS(fragmentFiles[i]), by = "RG")[[1]]
@@ -226,10 +265,17 @@ gc()
 #-------------------------------------------------------------------------------------------------
 set.seed(1)
 message("Making Seurat LSI Object...")
+# LSI is latent semantic indexing (dimred)
+# obj <- seuratLSI(mat, nComponents = 25, nFeatures = 20000) # error: No feature names (rownames) names present in the input matrix
+# setting rownames to mat
+rownames(mat) <- paste0(rep("f", nrow(mat)), rep(1:nrow(mat), each = 1))
+# run LSI now
 obj <- seuratLSI(mat, nComponents = 25, nFeatures = 20000)
+
 message("Adding Graph Clusters...")
 obj <- addClusters(obj, dims.use = 2:25, minGroupSize = 200, initialResolution = 0.8)
-saveRDS(obj, "results/Save-LSI-Windows-Seurat.rds")
+
+saveRDS(obj, "/projectnb/paxlab/isarfraz/Data/Save-LSI-Windows-Seurat.rds")
 clusterResults <- split(rownames(obj@meta.data), paste0("Cluster",obj@meta.data[,ncol(obj@meta.data)]))
 remove(obj)
 gc()
@@ -237,7 +283,7 @@ gc()
 #-------------------------------------------------------------------------------------------------
 # Get Cluster Beds
 #-------------------------------------------------------------------------------------------------
-dirClusters <- "results/LSI-Cluster-Beds/"
+dirClusters <- "/projectnb/paxlab/isarfraz/Data/LSI-Cluster-Beds/"
 dir.create(dirClusters)
 for(i in seq_along(fragmentFiles)){
 	fragments <-readRDS(fragmentFiles[i])
@@ -261,7 +307,7 @@ for(i in seq_along(fragmentFiles)){
 #-------------------------------------------------------------------------------------------------
 # Run MACS2
 #-------------------------------------------------------------------------------------------------
-dirPeaks <- "results/LSI-Cluster-Peaks/"
+dirPeaks <- "/projectnb/paxlab/isarfraz/Data/LSI-Cluster-Peaks/"
 method <- "q"
 cutoff <- 0.05
 shift <- -75

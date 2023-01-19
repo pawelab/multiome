@@ -148,7 +148,7 @@ filterTSS <- 8
 # file_fragments <- "data/PBMC_10x-Sub25M-fragments.tsv.gz"
 file_fragments <- "/projectnb/paxlab/isarfraz/Data/GSM4138893_scATAC_PBMC_D10T1.fragments.tsv.gz"
 # out_fragments <- "data/PBMC_10x-Sub25M-fragments.gr.rds"
-out_fragments <- "/projectnb/paxlab/isarfraz/Data/data/GSM4138893_scATAC_PBMC_D10T1.fragments.rds"
+out_fragments <- "/projectnb/paxlab/isarfraz/Data/GSM4138893_scATAC_PBMC_D10T1.fragments.rds"
 name <- "PBMC"
 
 ####################################################
@@ -222,7 +222,7 @@ fragments <- fragments[mcols(fragments)[,"RG"] %in% rownames(tssSingles)[tssSing
 fragments$RG <- paste0(name,"#",fragments$RG)
 
 #Save
-# saveRDS(fragments, out_fragments)
+saveRDS(fragments, out_fragments)
 
 
 
