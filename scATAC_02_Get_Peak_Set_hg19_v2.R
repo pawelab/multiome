@@ -72,16 +72,16 @@ seuratLSI <- function(mat, nComponents = 50, binarize = TRUE, nFeatures = NULL){
   mat <- mat[1:100,] + 1
   obj <- CreateSeuratObject(mat, project='scATAC', min.cells=0, min.genes=0)
   
-  # new setDimReduction code
-  dimObj <- CreateDimReducObject(
-    embeddings = matSVD,
-    key = "PC"
-  )
-  obj[["pca"]] <- dimObj
+  # # new setDimReduction code
+  # dimObj <- CreateDimReducObject(
+  #   embeddings = matSVD,
+  #   key = "PC"
+  # )
+  # obj[["pca"]] <- dimObj
   
   # outdated code for Seurat 
-  # obj <- SetDimReduction(object = obj, reduction.type = "pca", slot = "cell.embeddings", new.data = matSVD)
-  # obj <- SetDimReduction(object = obj, reduction.type = "pca", slot = "key", new.data = "PC")
+  obj <- SetDimReduction(object = obj, reduction.type = "pca", slot = "cell.embeddings", new.data = matSVD)
+  obj <- SetDimReduction(object = obj, reduction.type = "pca", slot = "key", new.data = "PC")
   return(obj)
 }
 
@@ -90,35 +90,35 @@ addClusters <- function(obj, minGroupSize = 50, dims.use = seq_len(50), initialR
   currentResolution <- initialResolution
   
   # below is outdated
-  # obj <- FindClusters(object = obj, reduction.type = "pca", dims.use = dims.use, resolution = currentResolution, print.output = FALSE)
-  obj <- FindNeighbors(object = obj, reduction = "pca", dims = dims.use) # new code
-  obj <- FindClusters(object = obj, resolution = currentResolution) # new code
+  obj <- FindClusters(object = obj, reduction.type = "pca", dims.use = dims.use, resolution = currentResolution, print.output = FALSE)
+  # obj <- FindNeighbors(object = obj, reduction = "pca", dims = dims.use) # new code
+  # obj <- FindClusters(object = obj, resolution = currentResolution) # new code
   
   
-  # minSize <- min(table(obj@meta.data[[paste0("res.",currentResolution)]]))
-  minSize <- min(table(obj@meta.data[[paste0("RNA_snn_res.",currentResolution)]]))
+  minSize <- min(table(obj@meta.data[[paste0("res.",currentResolution)]]))
+  # minSize <- min(table(obj@meta.data[[paste0("RNA_snn_res.",currentResolution)]]))
   
-  # nClust <- length(unique(paste0(obj@meta.data[[paste0("res.",currentResolution)]])))
-  nClust <- length(unique(paste0(obj@meta.data[[paste0("RNA_snn_res.",currentResolution)]])))
+  nClust <- length(unique(paste0(obj@meta.data[[paste0("res.",currentResolution)]])))
+  # nClust <- length(unique(paste0(obj@meta.data[[paste0("RNA_snn_res.",currentResolution)]])))
   
   message(sprintf("Current Resolution = %s, No of Clusters = %s, Minimum Cluster Size = %s", currentResolution, nClust, minSize))
   #If clusters are smaller than minimum group size
   while(minSize <= minGroupSize){
-    # obj@meta.data <- obj@meta.data[,-which(colnames(obj@meta.data)==paste0("res.",currentResolution))]
-    obj@meta.data <- obj@meta.data[,-which(colnames(obj@meta.data)==paste0("RNA_snn_res.",currentResolution))]
+    obj@meta.data <- obj@meta.data[,-which(colnames(obj@meta.data)==paste0("res.",currentResolution))]
+    # obj@meta.data <- obj@meta.data[,-which(colnames(obj@meta.data)==paste0("RNA_snn_res.",currentResolution))]
     
     currentResolution <- currentResolution*initialResolution
     
-    obj <- FindNeighbors(object = obj, reduction = "pca", dims = dims.use) # new code
-    obj <- FindClusters(object = obj, resolution = currentResolution) # new code
+    # obj <- FindNeighbors(object = obj, reduction = "pca", dims = dims.use) # new code
+    # obj <- FindClusters(object = obj, resolution = currentResolution) # new code
     
-    # obj <- FindClusters(object = obj, reduction.type = "pca", dims.use = dims.use, resolution = currentResolution, print.output = FALSE, force.recalc = TRUE)
+    obj <- FindClusters(object = obj, reduction.type = "pca", dims.use = dims.use, resolution = currentResolution, print.output = FALSE, force.recalc = TRUE)
     
-    # minSize <- min(table(obj@meta.data[[paste0("res.",currentResolution)]]))
-    # nClust <- length(unique(paste0(obj@meta.data[[paste0("res.",currentResolution)]])))
+    minSize <- min(table(obj@meta.data[[paste0("res.",currentResolution)]]))
+    nClust <- length(unique(paste0(obj@meta.data[[paste0("res.",currentResolution)]])))
     
-    minSize <- min(table(obj@meta.data[[paste0("RNA_snn_res.",currentResolution)]]))
-    nClust <- length(unique(paste0(obj@meta.data[[paste0("RNA_snn_res.",currentResolution)]])))
+    # minSize <- min(table(obj@meta.data[[paste0("RNA_snn_res.",currentResolution)]]))
+    # nClust <- length(unique(paste0(obj@meta.data[[paste0("RNA_snn_res.",currentResolution)]])))
     
     message(sprintf("Current Resolution = %s, No of Clusters = %s, Minimum Cluster Size = %s", currentResolution, nClust, minSize))
   }
@@ -266,11 +266,11 @@ gc()
 set.seed(1)
 message("Making Seurat LSI Object...")
 # LSI is latent semantic indexing (dimred)
-# obj <- seuratLSI(mat, nComponents = 25, nFeatures = 20000) # error: No feature names (rownames) names present in the input matrix
-# setting rownames to mat
-rownames(mat) <- paste0(rep("f", nrow(mat)), rep(1:nrow(mat), each = 1))
-# run LSI now
-obj <- seuratLSI(mat, nComponents = 25, nFeatures = 20000)
+obj <- seuratLSI(mat, nComponents = 25, nFeatures = 20000) 
+# # setting rownames to mat
+# rownames(mat) <- paste0(rep("f", nrow(mat)), rep(1:nrow(mat), each = 1))
+# # run LSI now
+# obj <- seuratLSI(mat, nComponents = 25, nFeatures = 20000)
 
 message("Adding Graph Clusters...")
 obj <- addClusters(obj, dims.use = 2:25, minGroupSize = 200, initialResolution = 0.8)
