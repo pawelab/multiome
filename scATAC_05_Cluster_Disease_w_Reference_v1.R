@@ -213,13 +213,23 @@ sparseMatTTest <- function(mat1, mat2, m0 = 0){
 
 #Reference Summarized Experiment
 #Contains Peaks for Reference Hematopoiesis only
-seReference <- readRDS("data/Supplementary_Data_Hematopoiesis/scATAC-Healthy-Hematopoiesis-190429.rds")
+# seReference <- readRDS("data/Supplementary_Data_Hematopoiesis/scATAC-Healthy-Hematopoiesis-190429.rds")
+#seReference <- readRDS("/projectnb/paxlab/isarfraz/Data/scATAC-Healthy-Hematopoiesis.rds")
 #seReference <- seReference[,sample(1:ncol(seReference),5000)] subset data to test since its faster
 
 #SE Disease Cells
 id <- "MPAL1"
-seDisease <- readRDS("../analysis/2019/Re-Analysis/Projections/ATAC/scATAC/output/Disease/MPAL1_R1/MPAL1_R1.se.rds")
-rownames(seDisease) <- paste0(seqnames(seDisease),"_",start(seDisease),"_",end(seDisease))
+# seDisease <- readRDS("../analysis/2019/Re-Analysis/Projections/ATAC/scATAC/output/Disease/MPAL1_R1/MPAL1_R1.se.rds")
+#seDisease <- readRDS("/projectnb/paxlab/isarfraz/Data/scATAC-Disease-Hematopoiesis.rds")
+#rownames(seDisease) <- paste0(seqnames(seDisease),"_",start(seDisease),"_",end(seDisease))
+
+# IRZAM udpate
+# so both have different features and cells, gonna try to get overlap 
+# doesnt work, too little overlap, maybe T1 vs R1 is issue or something else
+# going to try the all rds file from their github: scATAC-All-Hematopoiesis-MPAL-191120.rds
+seAll <- readRDS("/projectnb/paxlab/isarfraz/Data/scATAC-All-Hematopoiesis-MPAL-191120.rds")
+#seReference <- seAll[, which(colData(seAll)[["ProjectClassification"]] == "Reference")]
+#seDisease <- seAll[, which(colData(seAll)[["ProjectClassification"]] == "Disease")]
 
 #Set Clustering Parameters
 nPCs1 <- 1:25
@@ -228,7 +238,10 @@ resolution <- 0.8 #clustering resolution
 nTop <- 25000 #number of variable peaks
 
 #Create Matrix
-mat <- cbind(assay(seReference), assay(seDisease))
+# mat <- cbind(assay(seReference), assay(seDisease))
+# using all mat instead
+mat <- assay(seAll)
+
 
 #Run LSI 1st Iteration
 lsi1 <- calcLSI(mat, nComponents = 50, binarize = TRUE, nFeatures = NULL)
@@ -258,47 +271,55 @@ umap <- uwot::umap(
     ret_model = FALSE
     )
 
-#Plot Info
-cells <- c(
-    rep("reference", sum(rownames(lsi2$matSVD) %in% colnames(seReference))),
-    rep("disease",sum(rownames(lsi2$matSVD) %in% colnames(seDisease)))
-    )
+# here onwards just gonna use computations previously stored in seAll
+plotDF <- data.frame(x1 = colData(seAll)[["ProjectUMAP1"]], x2 = colData(seAll)[["ProjectUMAP2"]], color = colData(seAll)[["ProjectClassification"]])
+ggplot(plotDF, aes(x1,x2,color=color)) + 
+  geom_point() +
+  theme_bw() +
+  xlab("UMAP Dimension 1") + 
+  ylab("UMAP Dimension 2")
 
-splitCells <- split(cells,clust2)
-df <- data.frame(
-    clusters = names(splitCells),
-    proportion = unlist(lapply(seq_along(splitCells), function(x) sum(splitCells[[x]]=="disease") / length(splitCells[[x]])))
-    )
-
-#Plot UMAP Data Frame
-plotDF <- data.frame(umap)
-rownames(plotDF) <- c(colnames(seReference), colnames(seDisease))
-plotDF$type <- cells
-plotDF$clusters <- clust2
-plotDF$classification <- 0
-#If disease cells are clustered with healthy cluster (proportion > 0.9) we will classify these as healthy-like
-plotDF$classification[plotDF$type == "disease" & plotDF$clusters %in% paste0(df$clusters[df[,2] > 0.9])] <- 1
-plotDF$classification[plotDF$type == "disease"] <- plotDF$classification[plotDF$type == "disease"] + 1
-plotDF <- plotDF[order(plotDF$classification), ]
-
-#Formal Classification
-plotDF$classificationSTR <- "reference"
-plotDF$classificationSTR[plotDF$classification==1] <- "healthy-like"
-plotDF$classificationSTR[plotDF$classification==2] <- "disease-like"
-
-#Plot PDFs
-plotDir <- paste0("results/scATAC/classification/")
-dir.create(plotDir,recursive=TRUE)
-pdf(paste0(plotDir,id,"-Classification-UMAP.pdf"), width = 12, height = 12, useDingbats = FALSE)
-
-ggplot(plotDF, aes(X1,X2,color=classificationSTR)) + 
-    geom_point() +
-    theme_bw() +
-    xlab("UMAP Dimension 1") + 
-    ylab("UMAP Dimension 2") +
-    scale_color_manual(values=c("reference"="lightgrey","healthy-like"="dodgerblue3","disease-like"="firebrick3"))
-
-dev.off()
+# #Plot Info
+# cells <- c(
+#     rep("reference", sum(rownames(lsi2$matSVD) %in% colnames(seReference))),
+#     rep("disease",sum(rownames(lsi2$matSVD) %in% colnames(seDisease)))
+#     )
+# 
+# splitCells <- split(cells,clust2)
+# df <- data.frame(
+#     clusters = names(splitCells),
+#     proportion = unlist(lapply(seq_along(splitCells), function(x) sum(splitCells[[x]]=="disease") / length(splitCells[[x]])))
+#     )
+# 
+# #Plot UMAP Data Frame
+# plotDF <- data.frame(umap)
+# rownames(plotDF) <- c(colnames(seReference), colnames(seDisease))
+# plotDF$type <- cells
+# plotDF$clusters <- clust2
+# plotDF$classification <- 0
+# #If disease cells are clustered with healthy cluster (proportion > 0.9) we will classify these as healthy-like
+# plotDF$classification[plotDF$type == "disease" & plotDF$clusters %in% paste0(df$clusters[df[,2] > 0.9])] <- 1
+# plotDF$classification[plotDF$type == "disease"] <- plotDF$classification[plotDF$type == "disease"] + 1
+# plotDF <- plotDF[order(plotDF$classification), ]
+# 
+# #Formal Classification
+# plotDF$classificationSTR <- "reference"
+# plotDF$classificationSTR[plotDF$classification==1] <- "healthy-like"
+# plotDF$classificationSTR[plotDF$classification==2] <- "disease-like"
+# 
+# #Plot PDFs
+# plotDir <- paste0("results/scATAC/classification/")
+# dir.create(plotDir,recursive=TRUE)
+# pdf(paste0(plotDir,id,"-Classification-UMAP.pdf"), width = 12, height = 12, useDingbats = FALSE)
+# 
+# ggplot(plotDF, aes(X1,X2,color=classificationSTR)) + 
+#     geom_point() +
+#     theme_bw() +
+#     xlab("UMAP Dimension 1") + 
+#     ylab("UMAP Dimension 2") +
+#     scale_color_manual(values=c("reference"="lightgrey","healthy-like"="dodgerblue3","disease-like"="firebrick3"))
+# 
+# dev.off()
 
 ####################################################
 #Project Into LSI UMAP

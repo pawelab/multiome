@@ -203,6 +203,8 @@ colData(se)$UMAP2 <- uwotUmap[[1]][,2]
 #Add UMAP Params
 metadata(se)$UMAP_Params <- list(NN = 55, MD = 0.45, PCs = 1:50, VarPeaks = 50000, Res = "1.5")
 saveRDS(se, "/projectnb/paxlab/isarfraz/Data/scATAC-Healthy-Hematopoiesis.rds")
+# disease
+# saveRDS(se, "/projectnb/paxlab/isarfraz/Data/scATAC-Disease-Hematopoiesis.rds")
 
 #Save UMAP embedding
 save_uwot(uwotUmap, "/projectnb/paxlab/isarfraz/Data/scATAC-Hematopoiesis-UMAP-model.uwot")

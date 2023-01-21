@@ -138,6 +138,10 @@ insertionProfileSingles <- function(feature, fragments, by = "RG", getInsertions
   return(list(df = df, dfall = dfall, profileMat = profileMat, profileMatSmooth = profileMatSmooth))
 }
 
+# using this sample for healthy:
+# https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSM4138893
+# this for disease
+# https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSM4138898
 ####################################################
 # Input
 ####################################################
@@ -147,8 +151,10 @@ filterFrags <- 1000
 filterTSS <- 8
 # file_fragments <- "data/PBMC_10x-Sub25M-fragments.tsv.gz"
 file_fragments <- "/projectnb/paxlab/isarfraz/Data/GSM4138893_scATAC_PBMC_D10T1.fragments.tsv.gz"
+# file_fragments <- "/projectnb/paxlab/isarfraz/Data/GSM4138898_scATAC_MPAL1_T1.fragments.tsv.gz"
 # out_fragments <- "data/PBMC_10x-Sub25M-fragments.gr.rds"
 out_fragments <- "/projectnb/paxlab/isarfraz/Data/GSM4138893_scATAC_PBMC_D10T1.fragments.rds"
+# out_fragments <- "/projectnb/paxlab/isarfraz/Data/GSM4138898_scATAC_MPAL1_T1.fragments.rds"
 name <- "PBMC"
 
 ####################################################

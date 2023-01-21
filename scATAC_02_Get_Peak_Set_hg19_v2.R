@@ -234,6 +234,7 @@ groupSums <- function(mat, groups = NULL, na.rm = TRUE, sparse = FALSE){
 # Start
 #-------------------------------------------------------------------------------------------------
 # this is using the fragments from the filtered cells in rds file previously generated from script 01
+# will read all, healthy disease and all rds files, selecte carefully below
 fragmentFiles <- list.files("/projectnb/paxlab/isarfraz/Data", pattern = ".rds", full.names = TRUE)
 # if using next time, it will read all RDS files, so filter to include only fragments.rds files from script 01
 # fragmentFiles <- fragmentFiles[1]
