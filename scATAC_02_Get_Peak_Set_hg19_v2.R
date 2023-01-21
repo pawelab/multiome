@@ -233,24 +233,28 @@ groupSums <- function(mat, groups = NULL, na.rm = TRUE, sparse = FALSE){
 #-------------------------------------------------------------------------------------------------
 # Start
 #-------------------------------------------------------------------------------------------------
-# this is using the filtered fragments rds file previously generated from script 01
+# this is using the fragments from the filtered cells in rds file previously generated from script 01
 fragmentFiles <- list.files("/projectnb/paxlab/isarfraz/Data", pattern = ".rds", full.names = TRUE)
+# if using next time, it will read all RDS files, so filter to include only fragments.rds files from script 01
+# fragmentFiles <- fragmentFiles[1]
 
 #-------------------------------------------------------------------------------------------------
 # Get Counts In Windows
 #-------------------------------------------------------------------------------------------------
+# REF #
 # ref hg19 genome
 genome <- BSgenome.Hsapiens.UCSC.hg19
 # making granges object from ref genome (each row is one chr)
 chromSizes <- GRanges(names(seqlengths(genome)), IRanges(1, seqlengths(genome)))
-# possibly fitering some chr?
+# possibly fitering some chr in ref
 chromSizes <- GenomeInfoDb::keepStandardChromosomes(chromSizes, pruning.mode = "coarse")
-# making ranges of each chr
-windows <- unlist(tile(chromSizes, width = 2500))
+# making ranges of each chr in ref 
+windows <- unlist(tile(chromSizes, width = 2500)) 
 
+# NOW OUR DATA #
 # from fragments file, it creates a counts matrix
 # columns are cells
-# rows are????
+# rows are chr windows (ranges)
 countsList <- lapply(seq_along(fragmentFiles), function(i){
 	message(sprintf("%s of %s", i, length(fragmentFiles)))
 	counts <- countInsertions(windows, readRDS(fragmentFiles[i]), by = "RG")[[1]]
@@ -259,6 +263,7 @@ countsList <- lapply(seq_along(fragmentFiles), function(i){
 mat <- lapply(countsList, function(x) x) %>% Reduce("cbind",.)
 remove(countsList)
 gc()
+# so using ref genome, it creates counts of each chr window/region from our data
 
 #-------------------------------------------------------------------------------------------------
 # Run LSI Clustering with Seurat
@@ -267,6 +272,9 @@ set.seed(1)
 message("Making Seurat LSI Object...")
 # LSI is latent semantic indexing (dimred)
 obj <- seuratLSI(mat, nComponents = 25, nFeatures = 20000) 
+# possibly groups 20000 rows into one (windows), using LSI? maybe this is dimred
+# output is 100 features x full cells
+
 # # setting rownames to mat
 # rownames(mat) <- paste0(rep("f", nrow(mat)), rep(1:nrow(mat), each = 1))
 # # run LSI now
@@ -274,6 +282,7 @@ obj <- seuratLSI(mat, nComponents = 25, nFeatures = 20000)
 
 message("Adding Graph Clusters...")
 obj <- addClusters(obj, dims.use = 2:25, minGroupSize = 200, initialResolution = 0.8)
+# starts clustering from initial resolution of 0.8 and keeps going until every cluster >= 200 cells
 
 saveRDS(obj, "/projectnb/paxlab/isarfraz/Data/Save-LSI-Windows-Seurat.rds")
 clusterResults <- split(rownames(obj@meta.data), paste0("Cluster",obj@meta.data[,ncol(obj@meta.data)]))
@@ -283,6 +292,9 @@ gc()
 #-------------------------------------------------------------------------------------------------
 # Get Cluster Beds
 #-------------------------------------------------------------------------------------------------
+
+# for each cluster it is now separately cells from that cluster into each clusters own bed file (like a granges df)
+
 dirClusters <- "/projectnb/paxlab/isarfraz/Data/LSI-Cluster-Beds/"
 dir.create(dirClusters)
 for(i in seq_along(fragmentFiles)){
@@ -307,6 +319,11 @@ for(i in seq_along(fragmentFiles)){
 #-------------------------------------------------------------------------------------------------
 # Run MACS2
 #-------------------------------------------------------------------------------------------------
+
+# uses previous bed files for each cluster
+# then for each cluster it, macs was used for peak calling (identify accessible regions)
+
+
 dirPeaks <- "/projectnb/paxlab/isarfraz/Data/LSI-Cluster-Peaks/"
 method <- "q"
 cutoff <- 0.05
@@ -339,34 +356,44 @@ for(j in seq_along(clusterResults)){
 #-------------------------------------------------------------------------------------------------
 # Make Non-Overlapping Peak Set
 #-------------------------------------------------------------------------------------------------
+
+# overlapping peaks are merged
+
+dirPeaks <- "/projectnb/paxlab/isarfraz/Data/LSI-Cluster-Peaks" # added by me because of /
 df <- data.frame(
   samples = gsub("\\_summits.bed","",list.files(dirPeaks, pattern = "\\_summits.bed", full.names = FALSE)),
   groups = "scATAC",
   summits = list.files(dirPeaks, pattern = "\\_summits.bed", full.names = TRUE)
   )
 
+# downloaded hg19.blacklist.bed from https://github.com/Boyle-Lab/Blacklist/blob/master/lists/Blacklist_v1/hg19-blacklist.bed.gz
+# problematic regions of genome (hat have anomalous, unstructured, or high signal) - removal required
+# extendedPeakSet reads peaks previously identified and possibly removes blacklisted ones
 unionPeaks <- extendedPeakSet(
     df = df,
     BSgenome = genome, 
     extend = 250,
-    blacklist = "data/hg19.blacklist.bed",
+    blacklist = "/projectnb/paxlab/isarfraz/Data/hg19-blacklist.bed",
     nSummits = 200000
   )
 unionPeaks <- unionPeaks[seqnames(unionPeaks) %in% paste0("chr",c(1:22,"X"))]
 unionPeaks <- keepSeqlevels(unionPeaks, paste0("chr",c(1:22,"X")))
 
-#Create Counts list
+#Create Counts list from peaks 
 countsPeaksList <- lapply(seq_along(fragmentFiles), function(i){
   message(sprintf("%s of %s", i, length(fragmentFiles)))
   gc()
   countInsertions(unionPeaks, readRDS(fragmentFiles[i]), by = "RG")
 })
 
-#CountsMatrix
+#CountsMatrix from peaks
 mat <- lapply(countsPeaksList, function(x) x[[1]]) %>% Reduce("cbind",.)
 frip <- lapply(countsPeaksList, function(x) x[[2]]) %>% unlist
 total <- lapply(countsPeaksList, function(x) x[[3]]) %>% unlist
 
+dim(mat) # filtered peaks = (identified by macs and filtered from blacklisted)
+
+# object for downstream analysis
 se <- SummarizedExperiment(
   assays = SimpleList(counts = mat), 
   rowRanges = unionPeaks
@@ -374,6 +401,6 @@ se <- SummarizedExperiment(
 rownames(se) <- paste(seqnames(se),start(se),end(se),sep="_")
 colData(se)$FRIP <- frip
 colData(se)$uniqueFrags <- total / 2
-saveRDS(se, "results/scATAC-Summarized-Experiment.rds")
+saveRDS(se, "/projectnb/paxlab/isarfraz/Data/scATAC-Summarized-Experiment.rds")
 
 
