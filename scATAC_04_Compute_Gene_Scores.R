@@ -284,6 +284,31 @@ custom_cicero_cds <- function(
 
 }
 
+# copied from github issue https://github.com/GreenleafLab/MPAL-Single-Cell-2019/issues/16
+keepFilteredChromosomes <- function(x, remove = c("chrM"), underscore = TRUE, standard = TRUE, pruning.mode="coarse"){
+  #first we remove all non standard chromosomes
+  if(standard){
+    x <- GenomeInfoDb::keepStandardChromosomes(x, pruning.mode = pruning.mode)
+  }
+  #Then check for underscores or specified remove
+  seqNames <- seqlevels(x)
+  chrRemove <- c()
+  #first we remove all chr with an underscore
+  if(underscore){
+    chrRemove <- c(chrRemove, which(grepl("_", seqNames)))
+  }
+  #next we remove all chr specified in remove
+  chrRemove <- c(chrRemove, which(seqNames %in% remove))
+  if(length(chrRemove) > 0){
+    chrKeep <- seqNames[-chrRemove]
+  }else{
+    chrKeep <- seqNames
+  }
+  #this function restores seqlevels
+  seqlevels(x, pruning.mode=pruning.mode) <- chrKeep
+  return(x)
+}
+
 getGeneGTF <- function(file){
     #Import
     message("Reading in GTF...")
@@ -301,13 +326,22 @@ getGeneGTF <- function(file){
     #Gene Info
     message("Constructing gene GTF...")
     geneGTF1 <- importGTF[importGTF$type=="gene",]
+    # geneGTF2 <- GRanges(
+    #         seqnames=paste0("chr",seqnames(geneGTF1)), #error due to chr concetenation
+    #         ranges=ranges(geneGTF1),
+    #         strand=strand(geneGTF1),
+    #         gene_name=geneGTF1$gene_name,
+    #         gene_id=geneGTF1$gene_id
+    #     ) %>% keepFilteredChromosomes %>% sortSeqlevels %>% sort(.,ignore.strand=TRUE)
+    
     geneGTF2 <- GRanges(
-            seqnames=paste0("chr",seqnames(geneGTF1)),
-            ranges=ranges(geneGTF1),
-            strand=strand(geneGTF1),
-            gene_name=geneGTF1$gene_name,
-            gene_id=geneGTF1$gene_id
-        ) %>% keepFilteredChromosomes %>% sortSeqlevels %>% sort(.,ignore.strand=TRUE)
+      seqnames=seqnames(geneGTF1),
+      ranges=ranges(geneGTF1),
+      strand=strand(geneGTF1),
+      gene_name=geneGTF1$gene_name,
+      gene_id=geneGTF1$gene_id
+    ) %>% keepFilteredChromosomes %>% sortSeqlevels %>% sort(.,ignore.strand=TRUE)
+    
     mcols(geneGTF2)$exonLength <- exonLengths[geneGTF2$gene_id,]
     return(geneGTF2)
 }
@@ -315,6 +349,8 @@ getGeneGTF <- function(file){
 ####################################################
 #Input Data
 ####################################################
+
+#ref genome
 
 #Specific Genome Libraries
 library(BSgenome.Hsapiens.UCSC.hg19)
@@ -328,11 +364,16 @@ orgdb <- org.Hs.eg.db
 #Please Note Code here has been modified to work with finalized summarized experiment
 
 #Read input summarized experiment peaks x cells
-obj <- readRDS("results/scATAC-Summarized-Experiment.rds")
+# obj <- readRDS("/projectnb/paxlab/isarfraz/Data/scATAC-Summarized-Experiment.rds")
+obj <- readRDS("/projectnb/paxlab/isarfraz/Data/scATAC-Healthy-Hematopoiesis.rds")
 mdata <- colData(obj)
 
+# I downloaded from here, not sure if v3:
+# https://zenodo.org/record/3457880/files/Homo_sapiens.GRCh37.75.gtf
+
+# for mapping genes
 #Genes GTF File from 10x v3
-gtfFile <- "data/genes.gtf"
+gtfFile <- "/projectnb/paxlab/isarfraz/Data/genes.gtf"
 
 #Window around TSS to be called promoter
 tssWindow <- 2500
@@ -352,20 +393,28 @@ chromSizes <- seqlengths(bsgenome)[paste0("chr",c(1:22,"X"))]
 genome <- data.frame(names(chromSizes),chromSizes)
 rownames(genome) <- NULL
 
+
+# Using monocle, we find genes from peaks and then use cicero to:
+# Because single-cell chromatin accessibility data is extremely sparse, 
+# accurate estimation of co-accessibility scores requires us to aggregate similar cells to create more dense count data. 
+# Cicero does this using a k-nearest-neighbors approach which creates overlapping sets of cells.
+
 #Run Cicero
-obj <- makeCDS(obj, binarize = TRUE)
+obj <- makeCDS(obj, binarize = TRUE) #converts se to celldataset object (monocle)
 obj <- detectGenes(obj)
 obj <- estimateSizeFactors(obj)
 ciceroOut <- custom_cicero_cds(obj, k = 50, max_knn_iterations = 5000, reduced_coordinates = dimred[colnames(obj),])
 
 #Cicero Object CDS
 ciceroObj <- ciceroOut[[1]]
-saveRDS(ciceroObj, "results/save-cicero-aggregated-accessibility-cds.rds")
+saveRDS(ciceroObj, "/projectnb/paxlab/isarfraz/Data/save-cicero-aggregated-accessibility-cds.rds")
 
-#Keep Cell Mappings!
+#Keep Cell Mappings! from KNN based overlapping above 
 cellMapKNN <- ciceroOut[[2]]
-saveRDS(cellMapKNN, "results/save-cicero-KNN-Groupings-cds.rds")
+saveRDS(cellMapKNN, "/projectnb/paxlab/isarfraz/Data/save-cicero-KNN-Groupings-cds.rds")
 
+
+# below code computes correlations between peak ranges
 #Compute Correlations
 message("Computing grouped correlations...")
 gr <- featureToGR(featureData(ciceroObj)[[1]])
@@ -382,6 +431,8 @@ o <- o[o[,1]!=o[,2],]
 #Aggregtate Matrix
 logMat <- log2(edgeR::cpm(assayData(ciceroObj)$exprs)+1)
 o$cor <- rowCorCpp(o[,1], o[,2], logMat, logMat)
+
+# connections between each two peaks and their coaccessibility score/correlation
 connections <- data.frame(
     Peak1 = featureData(ciceroObj)[[1]][o[,1]], 
     Peak2 = featureData(ciceroObj)[[1]][o[,2]], 
@@ -390,6 +441,8 @@ connections <- data.frame(
 
 #Annotate CDS
 message("Annotating Cell Data Set...")
+
+# Maps genes from ref GTF file to our peaks data by creating a gene activity matrix from peaks
 
 #Make TSS Window for genes
 genes <- getGeneGTF(gtfFile) %>% resize(1,"start") %>% resize(tssWindow * 2 + 1, "center")
@@ -417,10 +470,12 @@ seCiceroLog <- SummarizedExperiment(
     colData = mdata
 )
 
+# se contains gene activity matrix with as genes as rows and columns as cells
+
 #Save Output
-saveRDS(connections, "results/Peaks-Co-Accessibility.rds")
-saveRDS(seCicero, "results/Cicero-Gene-Activity.rds")
-saveRDS(seCiceroLog, "results/Cicero-Log2-Gene-Activity.rds")
+saveRDS(connections, "/projectnb/paxlab/isarfraz/Data/Peaks-Co-Accessibility.rds")
+saveRDS(seCicero, "/projectnb/paxlab/isarfraz/Data/Cicero-Gene-Activity.rds")
+saveRDS(seCiceroLog, "/projectnb/paxlab/isarfraz/Data/Cicero-Log2-Gene-Activity.rds")
 
 
 
