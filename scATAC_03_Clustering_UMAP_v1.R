@@ -111,12 +111,22 @@ groupSums <- function (mat, groups = NULL, na.rm = TRUE, sparse = FALSE){
     return(gm)
 }
 
+##
+# Read previous rds file where filtered peaks have been stored
+# Run LSI dimred on all peaks and compute clusters
+# Use these clusters on all peaks, to find top variable peaks
+# Run LSI dimred on top variable peaks
+# Run clustering on top peaks LSI and show on umap
+
+
 ####################################################
 #Input Data
 ####################################################
 #Read in Summarized Experiment
 #Please Note Code here has been modified to work with finalized summarized experiment
-se <- readRDS("data/Supplementary_Data_Hematopoiesis/scATAC-Healthy-Hematopoiesis-190429.rds")
+# se <- readRDS("data/Supplementary_Data_Hematopoiesis/scATAC-Healthy-Hematopoiesis-190429.rds")
+se <- readRDS("/projectnb/paxlab/isarfraz/Data/scATAC-Summarized-Experiment.rds")
+
 
 ####################################################
 #For Clustering Analysis Start Here
@@ -171,7 +181,7 @@ uwotUmap <- uwot::umap(
     ret_model = TRUE
     )
 
-pdf("results/Plot_UMAP-NN-55-MD-45.pdf", width = 12, height = 12, useDingbats = FALSE)
+#pdf("results/Plot_UMAP-NN-55-MD-45.pdf", width = 12, height = 12, useDingbats = FALSE)
 df <- data.frame(
     x = uwotUmap[[1]][,1],
     y = uwotUmap[[1]][,2], 
@@ -180,10 +190,10 @@ df <- data.frame(
 ggplot(df,aes(x,y,color=color)) + 
     geom_point() + 
     theme_bw() + 
-    scale_color_manual(values=metadata(se)$colorMap$Clusters) +
+    #scale_color_manual(values=metadata(se)$colorMap$Clusters) + # error here
     xlab("UMAP Dimension 1") + 
     ylab("UMAP Dimension 2")
-dev.off()
+#dev.off()
 
 #Add UMAP coordinates to column data in summarized experiment
 colData(se)$UMAP1 <- uwotUmap[[1]][,1]
@@ -192,40 +202,40 @@ colData(se)$UMAP2 <- uwotUmap[[1]][,2]
 #Save Summarized Experiment
 #Add UMAP Params
 metadata(se)$UMAP_Params <- list(NN = 55, MD = 0.45, PCs = 1:50, VarPeaks = 50000, Res = "1.5")
-saveRDS(se, "results/scATAC-Healthy-Hematopoiesis.rds")
+saveRDS(se, "/projectnb/paxlab/isarfraz/Data/scATAC-Healthy-Hematopoiesis.rds")
 
 #Save UMAP embedding
-save_uwot(uwotUmap, "results/scATAC-Hematopoiesis-UMAP-model.uwot")
+save_uwot(uwotUmap, "/projectnb/paxlab/isarfraz/Data/scATAC-Hematopoiesis-UMAP-model.uwot")
 
 #If the above code does not work because tarring doesnt work for some reason on Stanford's compute server
 #The following code will do a similar job assumming system commands work
 #Adapted from save_uwot
-model <- uwotUmap
-file <- "results/scATAC-Hematopoiesis-UMAP-model.uwot.tar"
-mod_dir <- tempfile(pattern = "dir")
-dir.create(mod_dir)
-uwot_dir <- file.path(mod_dir, "uwot")
-dir.create(uwot_dir)
-model_tmpfname <- file.path(uwot_dir, "model")
-saveRDS(model, file = model_tmpfname)
-metrics <- names(model$metric)
-n_metrics <- length(metrics)
-for (i in 1:n_metrics) {
-    nn_tmpfname <- file.path(uwot_dir, paste0("nn", i))
-    if (n_metrics == 1) {
-        model$nn_index$save(nn_tmpfname)
-        model$nn_index$unload()
-        model$nn_index$load(nn_tmpfname)
-    }
-    else {
-        model$nn_index[[i]]$save(nn_tmpfname)
-        model$nn_index[[i]]$unload()
-        model$nn_index[[i]]$load(nn_tmpfname)
-    }
-}
-setwd(mod_dir)
-system(sprintf("tar -cvf %s%s %s", wd, file, "uwot/*"))
-setwd(wd)
+# model <- uwotUmap
+# file <- "results/scATAC-Hematopoiesis-UMAP-model.uwot.tar"
+# mod_dir <- tempfile(pattern = "dir")
+# dir.create(mod_dir)
+# uwot_dir <- file.path(mod_dir, "uwot")
+# dir.create(uwot_dir)
+# model_tmpfname <- file.path(uwot_dir, "model")
+# saveRDS(model, file = model_tmpfname)
+# metrics <- names(model$metric)
+# n_metrics <- length(metrics)
+# for (i in 1:n_metrics) {
+#     nn_tmpfname <- file.path(uwot_dir, paste0("nn", i))
+#     if (n_metrics == 1) {
+#         model$nn_index$save(nn_tmpfname)
+#         model$nn_index$unload()
+#         model$nn_index$load(nn_tmpfname)
+#     }
+#     else {
+#         model$nn_index[[i]]$save(nn_tmpfname)
+#         model$nn_index[[i]]$unload()
+#         model$nn_index[[i]]$load(nn_tmpfname)
+#     }
+# }
+# setwd(mod_dir)
+# system(sprintf("tar -cvf %s%s %s", wd, file, "uwot/*"))
+# setwd(wd)
 
 
 
