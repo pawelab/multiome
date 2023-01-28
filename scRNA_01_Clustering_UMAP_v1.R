@@ -207,7 +207,7 @@ optimizeLSI <- function(mat, scaleTo = 10000, priorCount = 3, pcsUse = 1:25,
 ####################################################
 #Read in Summarized Experiment
 #Please Note Code here has been modified to work with finalized summarized experiment
-se <- readRDS("data/Supplementary_Data_Hematopoiesis/scRNA-Healthy-Hematopoiesis-190429.rds")
+se <- readRDS("/projectnb/paxlab/isarfraz/Data/scRNA-Healthy-Hematopoiesis-191120.rds")
 
 ####################################################
 #For Clustering Analysis Start Here
