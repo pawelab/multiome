@@ -1,0 +1,59 @@
+---
+title: "analysis_1"
+author: "Irzam Sarfraz"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r}
+# Based on accessibility, are mutations enriched in peaks of some cell-type 
+
+
+library(singleCellTK)
+```
+
+```{r}
+# scATAC-seq Hematopoeisis + MPAL cell x peak Summarized Experiment
+data <- readRDS("/projectnb/paxlab/isarfraz/Greenleaf_Data_RDS/scATAC-All-Hematopoiesis-MPAL-191120.rds")
+data <- as(data, "SingleCellExperiment")
+```
+
+```{r}
+# UMAP1 and ProjectUMAP1 are different
+# Here I am testing with ProjectUMAP1
+umap1 <- colData(data)[["ProjectUMAP1"]]
+umap2 <- colData(data)[["ProjectUMAP2"]]
+umapProject <- data.frame(umap1 = umap1, umap2 = umap2)
+reducedDim(data, "umapProject") <- umapProject
+```
+
+```{r}
+# UMAP for umapProject
+singleCellTK::plotSCEDimReduceColData(inSCE = data, colorBy = "ProjectClassification", reducedDimName = "umapProject", dim1 = "umap1", dim2 = "umap2")
+```
+```{r}
+# UMAP1 and ProjectUMAP1 are different
+# Here I am testing with UMAP1
+umap1 <- colData(data)[["UMAP1"]]
+umap2 <- colData(data)[["UMAP2"]]
+umap <- data.frame(umap1 = umap1, umap2 = umap2)
+reducedDim(data, "umap") <- umap
+```
+
+```{r}
+# UMAP for umap
+singleCellTK::plotSCEDimReduceColData(inSCE = data, colorBy = "ProjectClassification", reducedDimName = "umap", dim1 = "umap1", dim2 = "umap2")
+```
+
+```{r}
+data
+```
+
+Need cell types
+
+lets do seurat tutorial
+
+```{r}
+library(Seurat)
+
+```
