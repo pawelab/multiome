@@ -8,12 +8,12 @@ output: html_document
 ```{r}
 .libPaths("/projectnb/paxlab/isarfraz/RProjects/libs")
 
+library(ggplot2)
 library(Seurat)
 library(Signac)
 library(EnsDb.Hsapiens.v86)
-library(ggplot2)
 library(cowplot)
-library(SeuratData)
+# library(SeuratData)
 library(SingleCellExperiment)
 # InstallData("pbmcMultiome")
 
@@ -23,6 +23,7 @@ library(SingleCellExperiment)
 
 ```{r}
 atac <- readRDS("/projectnb/paxlab/isarfraz/Greenleaf_Data_RDS/scATAC-All-Hematopoiesis-MPAL-191120.rds")
+# atac <- readRDS("/projectnb/paxlab/isarfraz/Greenleaf_Data_RDS/scATAC-Healthy-Hematopoiesis-191120.rds")
 peaks <- assay(atac, "counts")
 # gl_atac_all <- CreateSeuratObject(counts = peaks, assay = "peaks", project = "10x_ATAC")
 
@@ -72,6 +73,7 @@ DimPlot(object = gl_atac_all, label = TRUE) + NoLegend()
 # gene.activities <- GeneActivity(gl_atac_all) # needs fragment files
 # i will load from greenleaf processed gene activity using cicero
 gene.activities <- readRDS("/projectnb/paxlab/isarfraz/Greenleaf_Data_RDS/scATAC-Cicero-GA-Hematopoiesis-MPAL-191120.rds")
+# gene.activities <- readRDS("/projectnb/paxlab/isarfraz/Greenleaf_Data_RDS/scATAC-Cicero-GA-Hematopoiesis-191120.rds")
 gene.activities <- assay(gene.activities, "gA")
 # add the gene activity matrix to the Seurat object as a new assay and normalize it
 gl_atac_all[['RNA']] <- CreateAssayObject(data = gene.activities)
@@ -87,13 +89,23 @@ DefaultAssay(gl_atac_all) <- 'RNA'
 
 # basic cell types
 # monocytes, B, T, and NK cells
+# FeaturePlot(
+#   object = gl_atac_all,
+#   features = c('MS4A1', 'CD3D', 'LEF1', 'NKG7', 'TREM1', 'LYZ'),
+#   pt.size = 0.1,
+#   max.cutoff = 'q95',
+#   ncol = 3
+# )
+
+# T and B cells = CD3E, CD79A
 FeaturePlot(
   object = gl_atac_all,
-  features = c('MS4A1', 'CD3D', 'LEF1', 'NKG7', 'TREM1', 'LYZ'),
+  features = c('CD3E', 'CD79A'),
   pt.size = 0.1,
   max.cutoff = 'q95',
   ncol = 3
 )
+
 # Note that the activities will be much noisier than scRNA-seq measurements. This is because they represent measurements from sparse chromatin data, and because they assume a general correspondence between gene body/promoter accessibility and gene expression which may not always be the case. 
 
 # very scattered. matches the similar genes but not separate clusters.
@@ -103,13 +115,36 @@ FeaturePlot(
 
 
 # scRNA data now
+rna <- readRDS("/projectnb/paxlab/isarfraz/Greenleaf_Data_RDS/scRNA-Healthy-Hematopoiesis-191120.rds")
+counts <- assay(rna, "counts")
+rna <- CreateSeuratObject(counts = counts, assay = "RNA", project = "10x_ATAC")
+rna <- NormalizeData(rna)
+rna <- FindVariableFeatures(rna, nfeatures = 3000)
+rna <- ScaleData(rna)
+rna <- RunPCA(rna, npcs = 100)
+rna <- RunTSNE(rna, dims = 1:30)
+rna <- FindNeighbors(rna, dims = 1:30)
+rna <- FindClusters(rna, resolution = 0.4, algorithm = 3)
+rna <- RunUMAP(rna, graph = 'RNA_nn', metric = 'euclidean')
+
+FeaturePlot(
+  object = rna,
+  features = c('CD3E', 'CD79A'),
+  pt.size = 0.1,
+  max.cutoff = 'q95',
+  ncol = 3
+)
+
 ######
 # pbmc_rna <- readRDS("../vignette_data/pbmc_10k_v3.rds")
 transfer.anchors <- FindTransferAnchors(
-  reference = gl_rna_all,
+  reference = rna,
   query = gl_atac_all,
   reduction = 'cca'
 )
+
+# needs cell-types
+
 
 ```
 
