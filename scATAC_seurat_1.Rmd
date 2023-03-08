@@ -1,0 +1,96 @@
+---
+title: "scATAC_seurat_1"
+author: "Irzam Sarfraz"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r}
+.libPaths("/projectnb/paxlab/isarfraz/RProjects/libs")
+
+library(ggplot2)
+library(Seurat)
+library(Signac)
+library(EnsDb.Hsapiens.v86)
+library(cowplot)
+library(SingleCellExperiment)
+```
+# Script 3
+
+1. Read in peaks x cells matrix and convert to seurat
+NOTE: Here we only need healthy all cells
+
+```{r}
+atac_hl <- readRDS("/projectnb/paxlab/isarfraz/Data/Seurat_Final_Data/scATAC-Healthy-Hematopoiesis-191120.rds")
+print(dim(atac_hl))
+# read in previously computed peaks x cells
+# rows are peaks and columns are cells
+
+peaks <- assay(atac_hl, "counts")
+chrom_assay <- CreateChromatinAssay(counts = peaks, sep = c("_", "_"))
+atac_hl_srt <- CreateSeuratObject(
+  counts = chrom_assay,
+  assay = "peaks"
+)
+```
+
+2. Normalization and dimensionality reduction using LSI (TF-IDF + SVD)
+```{r}
+atac_hl_srt <- RunTFIDF(atac_hl_srt)
+atac_hl_srt <- RunSVD(atac_hl_srt, n = 51, features = rownames(atac_hl_srt))
+# using all features at this point
+DepthCor(atac_hl_srt)
+# first componenet is correlated, don't use it downstream
+```
+
+3. Clustering using SVD components (SNN)
+```{r}
+atac_hl_srt <- FindNeighbors(object = atac_hl_srt, dims = 2:51, reduction = "lsi")
+atac_hl_srt <- FindClusters(object = atac_hl_srt, resolution = 1.5)
+atac_hl_srt <- RunUMAP(object = atac_hl_srt, reduction = 'lsi', dims = 2:51) # default params
+
+DimPlot(object = atac_hl_srt, reduction = "umap", label = TRUE)
+```
+
+4. Find 50k variable peaks (this seurat method is using percetange of counts as cutoff instead of variance which greenleaf paper uses) and subset re-process
+```{r}
+top50k_peaks <- rownames(Signac::FindTopFeatures(atac_hl_srt[['peaks']][]))[1:50000]
+head(top50k_peaks)
+
+top50k_atac_hl_srt <- atac_hl_srt[top50k_peaks, ]
+
+top50k_atac_hl_srt <- RunTFIDF(top50k_atac_hl_srt)
+top50k_atac_hl_srt <- RunSVD(top50k_atac_hl_srt, n = 51, features = rownames(top50k_atac_hl_srt))
+
+top50k_atac_hl_srt <- FindNeighbors(object = top50k_atac_hl_srt, dims = 2:51, reduction = "lsi")
+top50k_atac_hl_srt <- FindClusters(object = top50k_atac_hl_srt, resolution = 1.5)
+top50k_atac_hl_srt <- RunUMAP(object = top50k_atac_hl_srt, reduction = 'lsi', dims = 2:51, min.dist = 0.001) #vary mindist
+# subset to top50k peaks
+# renormalize
+# re-cluster
+
+# top50k_atac_hl_srt <- RunUMAP(object = top50k_atac_hl_srt, reduction = 'lsi', dims = 2:51, n.neighbors = 55, min.dist = 0.45, metric = "euclidean") # these are from greenleaf but makes bad umap because of different process and top features
+
+
+DimPlot(object = top50k_atac_hl_srt, reduction = "umap", label = TRUE)
+```
+
+# Script 4
+
+1. Compute gene scores (gene activity matrix)
+needs fragments tsv files
+```{r}
+fpath <- "/projectnb/paxlab/isarfraz/Data/Seurat_Final_Data/GSM4138888_scATAC_BMMC_D5T1.fragments.tsv.gz"
+# tell here what to do if you dont have tabix file
+# install samtools then
+# https://github.com/stuart-lab/signac/issues/242#issuecomment-693666737
+fragments <- CreateFragmentObject(
+  path = fpath,
+  cells = colnames(atac_hl_srt),
+  validate.fragments = TRUE
+)
+#> Computing hash
+Fragments(atac_small) <- fragments
+
+```
+

@@ -1,0 +1,47 @@
+---
+title: "Peaks to Mutations"
+author: "Irzam Sarfraz"
+date: "`r Sys.Date()`"
+output: html_document
+---
+```{r}
+library(SingleCellExperiment)
+library(VariantAnnotation)
+library(GenomicRanges)
+```
+
+
+read atac peaks
+
+```{r}
+# scATAC-seq Hematopoeisis + MPAL cell x peak Summarized Experiment
+data <- readRDS("/projectnb/paxlab/isarfraz/Greenleaf_Data_RDS/scATAC-All-Hematopoiesis-MPAL-191120.rds")
+data <- as(data, "SingleCellExperiment")
+
+```
+
+read vcf mutations
+
+```{r}
+path_icgc_wgs_laml_kr <- "/projectnb/paxlab/ICGC/WGS/LAML-KR/"
+vcf <- readVcf(paste0(path_icgc_wgs_laml_kr, "1c300960-e51c-4477-8fdd-026c7e545dc4.MUSE_1-0rc-b391201-vcf.20160401.somatic.snv_mnv.vcf.gz"))
+
+head(rowRanges(vcf))
+```
+
+mapping (only one file at the moment which is one donor and one type of mutations)
+
+```{r}
+peaks_gr <- rowRanges(data)
+mut_gr <- rowRanges(vcf)
+
+seqlevels(mut_gr) <- paste0("chr", seqlevels(mut_gr))
+
+overlaps <- findOverlaps(mut_gr, peaks_gr) #296 hits what does it mean?
+
+peaks_mut_overlap <- as.data.frame(mcols(peaks_gr[subjectHits(overlaps)])) #subjectHits gives peak indices
+
+###
+# what about 200kb upstream that Pawel talked about?
+###
+```
