@@ -35,11 +35,13 @@ mapping (only one file at the moment which is one donor and one type of mutation
 peaks_gr <- rowRanges(data)
 mut_gr <- rowRanges(vcf)
 
-seqlevels(mut_gr) <- paste0("chr", seqlevels(mut_gr))
+seqlevels(mut_gr) <- paste0("chr", seqlevels(mut_gr)) # what about rows that are not chr? 
 
-overlaps <- findOverlaps(mut_gr, peaks_gr) #296 hits what does it mean?
+overlaps <- findOverlaps(mut_gr, peaks_gr) #296 hits what does it mean? 296 mutations from vcf were mapped to peaks in atac data. col 1 i.e. queryHits are the indices from mutations, col 2 i.e. subjectHits are indices from peaks
 
-peaks_mut_overlap <- as.data.frame(mcols(peaks_gr[subjectHits(overlaps)])) #subjectHits gives peak indices
+peaks_overlap <- as.data.frame(mcols(peaks_gr[subjectHits(overlaps)])) #subjectHits gives peak indices
+
+muts_overlap <- mut_gr[queryHits(overlaps), ] #queryhits gives mutation indices
 
 ###
 # what about 200kb upstream that Pawel talked about?
