@@ -8,6 +8,7 @@ output: html_document
 library(SingleCellExperiment)
 library(VariantAnnotation)
 library(GenomicRanges)
+library(plyranges)
 ```
 
 
@@ -15,8 +16,14 @@ read atac peaks
 
 ```{r}
 # scATAC-seq Hematopoeisis + MPAL cell x peak Summarized Experiment
-data <- readRDS("/projectnb/paxlab/isarfraz/Greenleaf_Data_RDS/scATAC-All-Hematopoiesis-MPAL-191120.rds")
+data <- readRDS("/projectnb/paxlab/isarfraz/Greenleaf_Data_RDS/scATAC-All-Hematopoiesis-MPAL-191120.rds") 
+# data <- readRDS("/projectnb/paxlab/isarfraz/Greenleaf_Data_RDS/scATAC-Healthy-Hematopoiesis-191120.rds") # this is healthy only
+# subset to mpal only
+# data <- data[, which(colData(data)[["ProjectClassification"]] != "Reference")]
 data <- as(data, "SingleCellExperiment")
+# subset to variable only
+# data <- data[which(metadata(data)$variablePeaks %in% rownames(data)), ]
+data
 
 ```
 
@@ -35,6 +42,10 @@ mapping (only one file at the moment which is one donor and one type of mutation
 peaks_gr <- rowRanges(data)
 mut_gr <- rowRanges(vcf)
 
+# check for specific chr
+# mut_gr %>% filter(seqnames == 'hs37d5')
+# mut_gr %>% filter(seqnames == 'GL000233.1')
+
 seqlevels(mut_gr) <- paste0("chr", seqlevels(mut_gr)) # what about rows that are not chr? 
 
 overlaps <- findOverlaps(mut_gr, peaks_gr) #296 hits what does it mean? 296 mutations from vcf were mapped to peaks in atac data. col 1 i.e. queryHits are the indices from mutations, col 2 i.e. subjectHits are indices from peaks
@@ -42,6 +53,16 @@ overlaps <- findOverlaps(mut_gr, peaks_gr) #296 hits what does it mean? 296 muta
 peaks_overlap <- as.data.frame(mcols(peaks_gr[subjectHits(overlaps)])) #subjectHits gives peak indices
 
 muts_overlap <- mut_gr[queryHits(overlaps), ] #queryhits gives mutation indices
+muts_overlap_df <- as.data.frame(muts_overlap)
+
+peaks_muts_combined <- cbind(muts_overlap_df, peaks_overlap, data.frame(peaks = rownames(peaks_overlap)))
+peaks_muts_combined$ALT <- as.vector(CharacterList(muts_overlap_df$ALT))
+peaks_muts_combined$paramRangeID <- NULL
+peaks_muts_combined$QUAL <- NULL
+peaks_muts_combined$name <- NULL
+head(peaks_muts_combined)
+
+
 
 ###
 # what about 200kb upstream that Pawel talked about?
