@@ -9,6 +9,8 @@ library(SingleCellExperiment)
 library(VariantAnnotation)
 library(GenomicRanges)
 library(plyranges)
+library(AnnotationHub)
+library(TxDb.Hsapiens.UCSC.hg19.knownGene)
 ```
 
 
@@ -31,7 +33,8 @@ read vcf mutations
 
 ```{r}
 path_icgc_wgs_laml_kr <- "/projectnb/paxlab/ICGC/WGS/LAML-KR/"
-vcf <- readVcf(paste0(path_icgc_wgs_laml_kr, "1c300960-e51c-4477-8fdd-026c7e545dc4.MUSE_1-0rc-b391201-vcf.20160401.somatic.snv_mnv.vcf.gz"))
+# vcf <- readVcf(paste0(path_icgc_wgs_laml_kr, "1c300960-e51c-4477-8fdd-026c7e545dc4.MUSE_1-0rc-b391201-vcf.20160401.somatic.snv_mnv.vcf.gz"))
+vcf <- readVcf(paste0(path_icgc_wgs_laml_kr, "fa718a69-7d09-424b-90a3-4839ba7dc9b2.dkfz-snvCalling_1-0-132-1.20150824.germline.snv_mnv.vcf.gz"))
 
 head(rowRanges(vcf))
 ```
@@ -47,6 +50,9 @@ mut_gr <- rowRanges(vcf)
 # mut_gr %>% filter(seqnames == 'GL000233.1')
 
 seqlevels(mut_gr) <- paste0("chr", seqlevels(mut_gr)) # what about rows that are not chr? 
+
+#subset to PASS and tier1
+mut_gr <- subset(mut_gr, FILTER %in% c("PASS", "Tier1"))
 
 overlaps <- findOverlaps(mut_gr, peaks_gr) #296 hits what does it mean? 296 mutations from vcf were mapped to peaks in atac data. col 1 i.e. queryHits are the indices from mutations, col 2 i.e. subjectHits are indices from peaks
 
@@ -67,4 +73,22 @@ head(peaks_muts_combined)
 ###
 # what about 200kb upstream that Pawel talked about?
 ###
+```
+
+
+annotate peaks_gr
+```{r}
+txdb_hg19 <- TxDb.Hsapiens.UCSC.hg19.knownGene
+seqlevels(txdb_hg19)
+
+genome(peaks_gr) <- "hg19"
+
+loc_hg19 <- locateVariants(peaks_gr, txdb_hg19, AllVariants()) #contains now all annotated regions (ranges are now smaller since multiple regions in original ranges, so overall more rows now)
+
+table(loc_hg19$LOCATION) # is intergenic distal region?
+
+# subset to non-coding regions
+peaks_non_coding <- subset(loc_hg19, LOCATION %in% c("intron", "intergenic")) #confirm?
+peaks_gr <- peaks_non_coding
+
 ```

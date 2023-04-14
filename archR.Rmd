@@ -1,0 +1,124 @@
+---
+title: "archR"
+author: "Irzam Sarfraz"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Workflow
+
+For healthy:
+- Process scRNA-seq data (normalization + LSI + do clustering + find cell-types using markers + generate umap)
+
+```{r}
+library(Seurat)
+scRNA_healthy_1 <- readRDS("/projectnb/paxlab/isarfraz/Data/GSM4138876_scRNA_PBMC_D4T1.rds") 
+seurat_healthy_rna <- CreateSeuratObject(counts = scRNA_healthy_1)
+seurat_healthy_rna <- FindVariableFeatures(seurat_healthy_rna)
+seurat_healthy_rna <- NormalizeData(seurat_healthy_rna)
+seurat_healthy_rna <- ScaleData(seurat_healthy_rna)
+# seurat_healthy_rna <- RunSLSI(seurat_healthy_rna) # this wont work because specifically designed for atac-data
+
+#using fixed optimizeLSI code
+# which input matrix (using counts)
+sce <- SingleCellExperiment(list(counts=scRNA_healthy_1))
+healthy_rna_lsi <- optimizeLSI(inSCE = sce, mat = scRNA_healthy_1)
+healthy_rna_lsi <- healthy_rna_lsi$iter3$matNorm # sure that this mat should be used?
+assay(sce, "lsi") <- healthy_rna_lsi
+sce <- singleCellTK::runUMAP(inSCE = sce, useAssay = "lsi", useReducedDim = NULL, reducedDimName = "UMAP")
+singleCellTK::plotUMAP(sce, reducedDimName = "UMAP")
+# do clusters
+
+```
+
+- Process scATAC-seq data (gene activity scores first + LSI + do clustering + integrate with RNA for cell-types + make UMAP)
+- do we need a combined UMAP for RNA and atac?
+
+
+
+For mpal:
+- do all same as above
+- but create projection for healthy umap (this is not in archR - https://github.com/GreenleafLab/ArchR/discussions/1147) - can we use seurat here? yes (https://satijalab.org/seurat/articles/integration_mapping.html) (issue comes with LSI)
+
+
+For ameya archR:
+healthy
+```{r}
+
+
+```
+
+mpal
+```{r}
+setwd("/projectnb/paxlab/isarfraz/Greenleaf_ATAC_Fragments/healthy/")
+inputFiles <- list.files("/projectnb/paxlab/isarfraz/Greenleaf_ATAC_Fragments/healthy/")
+ArrowFiles <- createArrowFiles(
+  inputFiles = inputFiles,
+  sampleNames = inputFiles,
+  filterTSS = 4, #Dont set this too high because you can always increase later
+  filterFrags = 1000, 
+  addTileMat = TRUE,
+  addGeneScoreMat = TRUE
+)
+
+doubScores <- addDoubletScores(
+    input = ArrowFiles,
+    k = 10, #Refers to how many cells near a "pseudo-doublet" to count.
+    knnMethod = "UMAP", #Refers to the embedding to use for nearest neighbor search with doublet projection.
+    LSIMethod = 1
+)
+
+projHeme1 <- ArchRProject(
+  ArrowFiles = ArrowFiles, 
+  outputDirectory = "HemeTutorial",
+  copyArrows = TRUE #This is recommened so that if you modify the Arrow files you have an original copy for later usage.
+)
+
+projHeme1 <- addIterativeLSI(
+    ArchRProj = projHeme1,
+    useMatrix = "TileMatrix", 
+    name = "IterativeLSI", 
+    iterations = 2, 
+    clusterParams = list( #See Seurat::FindClusters
+        resolution = c(0.2), 
+        sampleCells = 10000, 
+        n.start = 10
+    ), 
+    varFeatures = 25000, 
+    dimsToUse = 1:30
+)
+
+projHeme1 <- addClusters(
+    input = projHeme1,
+    reducedDims = "IterativeLSI",
+    method = "Seurat",
+    name = "Clusters",
+    resolution = 0.8
+)
+
+projHeme1 <- addUMAP(
+    ArchRProj = projHeme1, 
+    reducedDims = "IterativeLSI", 
+    name = "UMAP", 
+    nNeighbors = 30, 
+    minDist = 0.5, 
+    metric = "cosine"
+)
+
+projHeme1 <- addReproduciblePeakSet(
+    ArchRProj = projHeme1, 
+    groupBy = "Clusters",
+    peakMethod = "Tiles",
+    method = "p"
+)
+
+projHeme1 <- addPeak2GeneLinks(
+    ArchRProj = projHeme1,
+    reducedDims = "IterativeLSI"
+)
+```
+
