@@ -1,3 +1,7 @@
+# module load macs2
+# module load R
+# R
+
 setwd("/projectnb/paxlab/isarfraz/RProjects/Non-Coding-Mutations-Multiome-Analysis")
 .libPaths("/usr2/collab/isarfraz/R/x86_64-pc-linux-gnu-library/4.2")
 library(ArchR)
@@ -75,9 +79,10 @@ print(pathToMacs2)
 projHeme4 <- addReproduciblePeakSet(
   ArchRProj = projHeme4, 
   groupBy = "Clusters2", 
-  pathToMacs2 = pathToMacs2
+  pathToMacs2 = findMacs2()
 )
 print("==peaks end==")
-
+getPeakSet(projHeme4)
+projHeme5 <- addPeakMatrix(projHeme4)
 
 
