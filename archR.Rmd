@@ -16,6 +16,9 @@ For healthy:
 
 ```{r}
 library(Seurat)
+library(SingleCellExperiment)
+library(singleCellTK)
+
 scRNA_healthy_1 <- readRDS("/projectnb/paxlab/isarfraz/Data/GSM4138876_scRNA_PBMC_D4T1.rds") 
 seurat_healthy_rna <- CreateSeuratObject(counts = scRNA_healthy_1)
 seurat_healthy_rna <- FindVariableFeatures(seurat_healthy_rna)
@@ -27,12 +30,17 @@ seurat_healthy_rna <- ScaleData(seurat_healthy_rna)
 # which input matrix (using counts)
 sce <- SingleCellExperiment(list(counts=scRNA_healthy_1))
 healthy_rna_lsi <- optimizeLSI(inSCE = sce, mat = scRNA_healthy_1)
+embeddings <- healthy_rna_lsi$iter3$lsiObj$matSVD
 healthy_rna_lsi <- healthy_rna_lsi$iter3$matNorm # sure that this mat should be used?
 assay(sce, "lsi") <- healthy_rna_lsi
 sce <- singleCellTK::runUMAP(inSCE = sce, useAssay = "lsi", useReducedDim = NULL, reducedDimName = "UMAP")
 singleCellTK::plotUMAP(sce, reducedDimName = "UMAP")
 # do clusters
 
+# create seurat object
+pca <- CreateDimReducObject(embeddings = embeddings, key = "PC_")
+seurat_healthy_rna <- CreateSeuratObject(counts = assay(sce, "counts"), assay = "RNA")
+seurat_healthy_rna[["pca"]] <- pca
 ```
 
 - Process scATAC-seq data (gene activity scores first + LSI + do clustering + integrate with RNA for cell-types + make UMAP)
@@ -43,6 +51,63 @@ singleCellTK::plotUMAP(sce, reducedDimName = "UMAP")
 For mpal:
 - do all same as above
 - but create projection for healthy umap (this is not in archR - https://github.com/GreenleafLab/ArchR/discussions/1147) - can we use seurat here? yes (https://satijalab.org/seurat/articles/integration_mapping.html) (issue comes with LSI)
+
+```{r}
+scRNA_mpal_1 <- readRDS("/projectnb/paxlab/isarfraz/Data/GSM4138878_scRNA_MPAL1_T1.rds") 
+sce <- SingleCellExperiment(list(counts=scRNA_mpal_1))
+mpal_rna_lsi <- optimizeLSI(inSCE = sce, mat = scRNA_mpal_1)
+embeddings <- mpal_rna_lsi$iter3$lsiObj$matSVD
+mpal_rna_lsi <- mpal_rna_lsi$iter3$matNorm # sure that this mat should be used?
+assay(sce, "lsi") <- mpal_rna_lsi
+sce <- singleCellTK::runUMAP(inSCE = sce, useAssay = "lsi", useReducedDim = NULL, reducedDimName = "UMAP")
+singleCellTK::plotUMAP(sce, reducedDimName = "UMAP")
+
+pca <- CreateDimReducObject(embeddings = embeddings, key = "PC_")
+seurat_mpal_rna <- CreateSeuratObject(counts = assay(sce, "counts"), assay = "RNA")
+seurat_mpal_rna[["pca"]] <- pca
+```
+
+projection
+
+```{r}
+pancreas.anchors <- FindIntegrationAnchors(object.list = list(seurat_healthy_rna_1, seurat_mpal_rna), dims = 1:30)
+pancreas.integrated <- IntegrateData(anchorset = pancreas.anchors, dims = 1:30)
+
+library(ggplot2)
+library(cowplot)
+library(patchwork)
+# switch to integrated assay. The variable features of this assay are automatically set during
+# IntegrateData
+DefaultAssay(pancreas.integrated) <- "integrated"
+# Run the standard workflow for visualization and clustering
+pancreas.integrated <- ScaleData(pancreas.integrated, verbose = FALSE)
+pancreas.integrated <- RunPCA(pancreas.integrated, npcs = 30, verbose = FALSE)
+pancreas.integrated <- RunUMAP(pancreas.integrated, reduction = "pca", dims = 1:30, verbose = FALSE)
+
+tech <- c(rep("healthy", ncol(seurat_healthy_rna_1)), rep("mpal", ncol(seurat_mpal_rna)))
+pancreas.integrated$tech <- tech
+
+p1 <- DimPlot(pancreas.integrated, reduction = "umap", group.by = "tech")
+p1
+
+
+pancreas.query <- seurat_mpal_rna
+pancreas.anchors <- FindTransferAnchors(reference = pancreas.integrated, query = pancreas.query,
+    dims = 1:30, reference.reduction = "pca")
+predictions <- TransferData(anchorset = pancreas.anchors, refdata = pancreas.integrated$tech,
+    dims = 1:30)
+pancreas.query <- AddMetaData(pancreas.query, metadata = predictions)
+
+pancreas.integrated <- RunUMAP(pancreas.integrated, dims = 1:30, reduction = "pca", return.model = TRUE)
+pancreas.query <- MapQuery(anchorset = pancreas.anchors, reference = pancreas.integrated, query = pancreas.query,
+    refdata = list(tech = "tech"), reference.reduction = "pca", reduction.model = "umap")
+
+p1 <- DimPlot(pancreas.integrated, reduction = "umap", group.by = "tech", label = TRUE, label.size = 3,
+    repel = TRUE) + NoLegend() + ggtitle("Reference annotations")
+p2 <- DimPlot(pancreas.query, reduction = "ref.umap", group.by = "predicted.tech", label = TRUE,
+    label.size = 3, repel = TRUE) + NoLegend() + ggtitle("Query transferred labels")
+p1 + p2
+```
 
 
 For ameya archR:
